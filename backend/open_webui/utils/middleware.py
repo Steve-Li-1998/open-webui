@@ -470,11 +470,16 @@ def serialize_output(output: list) -> str:
         if item.get('type') == 'function_call_output':
             tool_outputs[item.get('call_id')] = item
 
+    # Track adjacent reasoning text to avoid rendering duplicate thought blocks
+    # produced by some providers in mixed reasoning/content streams.
+    last_rendered_reasoning = None
+
     # Second pass: render items in order
     for idx, item in enumerate(output):
         item_type = item.get('type', '')
 
         if item_type == 'message':
+            last_rendered_reasoning = None
             for content_part in item.get('content', []):
                 if 'text' in content_part:
                     text = content_part.get('text', '').strip()
@@ -482,6 +487,7 @@ def serialize_output(output: list) -> str:
                         parts.append(text)
 
         elif item_type == 'function_call':
+            last_rendered_reasoning = None
             call_id = item.get('call_id', '')
             name = item.get('name', '')
             arguments = item.get('arguments', '')
@@ -506,6 +512,7 @@ def serialize_output(output: list) -> str:
                 )
 
         elif item_type == 'function_call_output':
+            last_rendered_reasoning = None
             # Already handled inline with function_call above
             pass
 
@@ -525,6 +532,13 @@ def serialize_output(output: list) -> str:
                     pass
 
             reasoning_content = ''.join(reasoning_parts).strip()
+
+            # Skip adjacent duplicate reasoning blocks that contain identical text.
+            # This keeps UI call traces aligned with actual backend/provider calls.
+            if reasoning_content and reasoning_content == last_rendered_reasoning:
+                continue
+            if reasoning_content:
+                last_rendered_reasoning = reasoning_content
 
             duration = item.get('duration')
             status = item.get('status', 'in_progress')
@@ -549,6 +563,7 @@ def serialize_output(output: list) -> str:
                 )
 
         elif item_type == 'open_webui:code_interpreter':
+            last_rendered_reasoning = None
             # Code interpreter needs to inspect/mutate prior accumulated content
             # to strip trailing unclosed code fences — materialize only here.
             content = '\n'.join(parts)
