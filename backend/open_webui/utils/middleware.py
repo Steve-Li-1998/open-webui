@@ -410,11 +410,16 @@ def serialize_output(output: list) -> str:
         if item.get('type') == 'function_call_output':
             tool_outputs[item.get('call_id')] = item
 
+    # Track adjacent reasoning text to avoid rendering duplicate thought blocks
+    # produced by some providers in mixed reasoning/content streams.
+    last_rendered_reasoning = None
+
     # Second pass: render items in order
     for idx, item in enumerate(output):
         item_type = item.get('type', '')
 
         if item_type == 'message':
+            last_rendered_reasoning = None
             for content_part in item.get('content', []):
                 if 'text' in content_part:
                     text = content_part.get('text', '').strip()
@@ -422,6 +427,7 @@ def serialize_output(output: list) -> str:
                         content = f'{content}{text}\n'
 
         elif item_type == 'function_call':
+            last_rendered_reasoning = None
             # Render tool call inline with its result (if available)
             if content and not content.endswith('\n'):
                 content += '\n'
@@ -445,6 +451,7 @@ def serialize_output(output: list) -> str:
                 content += f'<details type="tool_calls" done="false" id="{call_id}" name="{name}" arguments="{html.escape(json.dumps(arguments))}">\n<summary>Executing...</summary>\n</details>\n'
 
         elif item_type == 'function_call_output':
+            last_rendered_reasoning = None
             # Already handled inline with function_call above
             pass
 
@@ -459,6 +466,13 @@ def serialize_output(output: list) -> str:
                     pass
 
             reasoning_content = reasoning_content.strip()
+
+            # Skip adjacent duplicate reasoning blocks that contain identical text.
+            # This keeps UI call traces aligned with actual backend/provider calls.
+            if reasoning_content and reasoning_content == last_rendered_reasoning:
+                continue
+            if reasoning_content:
+                last_rendered_reasoning = reasoning_content
 
             duration = item.get('duration')
             status = item.get('status', 'in_progress')
@@ -482,6 +496,7 @@ def serialize_output(output: list) -> str:
                 content = f'{content}<details type="reasoning" done="false">\n<summary>Thinking…</summary>\n{display}\n</details>\n'
 
         elif item_type == 'open_webui:code_interpreter':
+            last_rendered_reasoning = None
             content_stripped, original_whitespace = split_content_and_whitespace(content)
             if is_opening_code_block(content_stripped):
                 content = content_stripped.rstrip('`').rstrip() + original_whitespace
