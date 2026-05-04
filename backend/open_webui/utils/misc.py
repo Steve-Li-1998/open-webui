@@ -157,18 +157,18 @@ def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
             # Note: Kimi and other models require tool_calls to be present in the message
             # even if content is empty, to properly reconstruct the conversation flow
             msg = {
-                "role": "assistant",
-                "content": "\n".join(pending_content) if pending_content else "",
+                'role': 'assistant',
+                'content': '\n'.join(pending_content) if pending_content else '',
             }
 
             # Preserve reasoning_content for models that validate thinking mode
             # (e.g. Kimi requires this when assistant message contains tool_calls).
             if pending_reasoning_content:
-                msg["reasoning_content"] = "\n".join(pending_reasoning_content)
+                msg['reasoning_content'] = '\n'.join(pending_reasoning_content)
 
             # Always include tool_calls if present (Kimi spec requires this)
             if pending_tool_calls:
-                msg["tool_calls"] = pending_tool_calls
+                msg['tool_calls'] = pending_tool_calls
 
             messages.append(msg)
             pending_content = []
